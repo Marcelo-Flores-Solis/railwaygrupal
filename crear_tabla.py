@@ -1,11 +1,11 @@
 import mysql.connector
 
 config = {
-    'host': 'PEGA_AQUI_TU_MYSQLHOST',     
-    'user': 'PEGA_AQUI_TU_MYSQLUSER',      
-    'password': 'PEGA_AQUI_TU_MYSQLPASSWORD', 
-    'database': 'PEGA_AQUI_TU_MYSQLDATABASE', 
-    'port': 3306                                
+    'host': 'mysql.railway.internal',     
+    'user': 'root',      
+    'password': 'hiOlGXJZEDkyQKWcrxzISOsRaXGcBpho', 
+    'database': 'railway', 
+    'port': 3306                               
 }
 
 try:

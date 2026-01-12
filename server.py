@@ -1,3 +1,5 @@
+import http.server
+
 import socketserver
 
 import os
@@ -214,55 +216,4 @@ class BibliotecaHandler(http.server.BaseHTTPRequestHandler):
 
         self.end_headers()
 
-        self.w        # Quitamos la barra inicial para que os.path.join funcione bien
-        ruta_relativa = path.lstrip('/') 
-        # Si la ruta ya incluye 'assets/', úsala directo, si no, ajústala
-        if not ruta_relativa.startswith(ASSET_DIR):
-             ruta_relativa = os.path.join(ASSET_DIR, ruta_relativa)
-        
-        if os.path.exists(ruta_relativa):
-            mime_type, _ = mimetypes.guess_type(ruta_relativa)
-            with open(ruta_relativa, 'rb') as f:
-                self.send_response(200)
-                self.send_header('Content-type', mime_type or 'application/octet-stream')
-                self.end_headers()
-                self.wfile.write(f.read())
-        else:
-            self.send_error(404, "Asset no encontrado")
-
-    def manejar_api_get(self, path, query):
-        if not db_manager:
-            self.responder_json([], 500)
-            return
-
-        if path == '/api/libros':
-            libros = db_manager.obtener_todos_los_libros()
-            self.responder_json(libros)
-        
-        elif path == '/api/buscar':
-            params = parse_qs(query)
-            termino = params.get('q', [''])[0]
-            libros = db_manager.buscar_libros(termino)
-            self.responder_json(libros)
-
-        elif path == '/api/libro':
-            params = parse_qs(query)
-            id_libro = params.get('id', [None])[0]
-            libro = db_manager.obtener_libro_por_id(id_libro)
-            if libro: self.responder_json(libro)
-            else: self.send_error(404, "Libro no encontrado")
-
-    def responder_json(self, data, status=200):
-        self.send_response(status)
-        self.send_header('Content-type', 'application/json')
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.end_headers()
-        self.wfile.write(json.dumps(data, default=str).encode('utf-8'))
-
-class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
-    pass
-
-if __name__ == '__main__':
-    print(f"🚀 Servidor corriendo en puerto {PORT}")
-    server = ThreadedHTTPServer(('', PORT), BibliotecaHandler)
-    server.serve_forever()
+        self.w

@@ -21,11 +21,12 @@ ASSET_DIR = 'assets'
 class BibliotecaHandler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
+        print(f"📥 Petición recibida: {self.path}") # LOG NUEVO
+        
         parsed = urlparse(self.path)
         path = parsed.path.rstrip('/')
         if path == '': path = '/'
 
-        # Mapa de rutas HTML
         rutas_html = {
             '/': 'index.html',
             '/catalogo': 'catalogo.html',
@@ -34,6 +35,37 @@ class BibliotecaHandler(http.server.BaseHTTPRequestHandler):
             '/usuario': 'user.html',
             '/detalle': 'element.html'
         }
+
+        try:
+            # 1. API
+            if path.startswith('/api/'):
+                print("   👉 Redirigiendo a API") # LOG NUEVO
+                self.manejar_api_get(path, parsed.query)
+                return
+
+            # 2. ASSETS
+            if path.startswith('/assets/'):
+                print("   👉 Sirviendo asset") # LOG NUEVO
+                self.servir_statico(path)
+                return
+
+            # 3. HTML
+            if path in rutas_html:
+                archivo = os.path.join(TEMPLATE_DIR, rutas_html[path])
+                print(f"   👉 Intentando servir HTML: {archivo}") # LOG NUEVO
+                
+                if os.path.exists(archivo):
+                    self.servir_archivo(archivo, 'text/html')
+                else:
+                    print(f"   ❌ ERROR: No encuentro el archivo {archivo}") # LOG NUEVO
+                    self.send_error(404, f"Falta el archivo {rutas_html[path]} en templates/")
+            else:
+                print("   ❌ Ruta desconocida")
+                self.send_error(404, "Pagina no encontrada")
+
+        except Exception as e:
+            print(f"🔥 CRASH en do_GET: {e}") # LOG NUEVO
+            self.send_error(500, f"Error interno: {e}")
 
         try:
             # 1. API (Datos JSON para Javascript)

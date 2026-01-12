@@ -1,21 +1,22 @@
 import mysql.connector
-import os
 from mysql.connector import Error
-from datetime import datetime
 
 def crear_conexion():
+    """Conecta a la base de datos usando tus credenciales DIRECTAS"""
     try:
         connection = mysql.connector.connect(
-            host=os.getenv('MYSQLHOST', 'localhost'),
-            user=os.getenv('MYSQLUSER', 'root'),
-            password=os.getenv('MYSQLPASSWORD', ''),
-            database=os.getenv('MYSQLDATABASE', 'railway'),
-            port=int(os.getenv('MYSQLPORT', 3306))
+            host='crossover.proxy.rlwy.net',         
+            user='root',                             
+            password='aRDrOAsJWIFemryAXrZuMVpcfqlIbhzL', 
+            port=39993,                               
+            database='railway'                        
         )
         return connection
     except Error as e:
         print(f"Error al conectar a MySQL: {e}")
         return None
+
+# --- GESTIÓN DE LIBROS ---
 
 def obtener_todos_los_libros():
     conn = crear_conexion()
@@ -52,21 +53,7 @@ def obtener_libro_por_id(id_libro):
         conn.close()
     return libro
 
-def agregar_libro(titulo, autor, descripcion, imagen_url):
-    conn = crear_conexion()
-    if conn and conn.is_connected():
-        try:
-            cursor = conn.cursor()
-            query = "INSERT INTO libros (titulo, autor, descripcion, imagen_url, disponible) VALUES (%s, %s, %s, %s, 1)"
-            cursor.execute(query, (titulo, autor, descripcion, imagen_url))
-            conn.commit()
-            return True
-        except Error as e:
-            print(f"Error agregando libro: {e}")
-        finally:
-            cursor.close()
-            conn.close()
-    return False
+# --- PRÉSTAMOS Y DEVOLUCIONES ---
 
 def prestar_libro(id_libro, id_usuario):
     conn = crear_conexion()
@@ -74,15 +61,18 @@ def prestar_libro(id_libro, id_usuario):
     if conn and conn.is_connected():
         try:
             cursor = conn.cursor()
-            query_update = "UPDATE libros SET disponible = 0 WHERE id = %s AND disponible = 1"
-            cursor.execute(query_update, (id_libro,))
-            if cursor.rowcount == 0:
-                print("El libro no está disponible.")
-                return False
-            query_insert = "INSERT INTO prestamos (usuario_id, libro_id) VALUES (%s, %s)"
-            cursor.execute(query_insert, (id_usuario, id_libro))
-            conn.commit()
-            exito = True
+            # 1. Verificar si está disponible
+            query_check = "SELECT disponible FROM libros WHERE id = %s"
+            cursor.execute(query_check, (id_libro,))
+            res = cursor.fetchone()
+            
+            if res and res[0] == 1:
+                # 2. Marcar como prestado
+                cursor.execute("UPDATE libros SET disponible = 0 WHERE id = %s", (id_libro,))
+                # 3. Registrar el préstamo
+                cursor.execute("INSERT INTO prestamos (usuario_id, libro_id) VALUES (%s, %s)", (id_usuario, id_libro))
+                conn.commit()
+                exito = True
         except Error as e:
             conn.rollback()
             print(f"Error prestando libro: {e}")
@@ -97,37 +87,33 @@ def devolver_libro(id_libro, id_usuario):
     if conn and conn.is_connected():
         try:
             cursor = conn.cursor()
-            query_libro = "UPDATE libros SET disponible = 1 WHERE id = %s"
-            cursor.execute(query_libro, (id_libro,))
-            query_prestamo = """
-                UPDATE prestamos 
-                SET fecha_devolucion = NOW() 
-                WHERE libro_id = %s AND usuario_id = %s AND fecha_devolucion IS NULL
-            """
-            cursor.execute(query_prestamo, (id_libro, id_usuario))
+            # 1. Marcar como disponible
+            cursor.execute("UPDATE libros SET disponible = 1 WHERE id = %s", (id_libro,))
+            # 2. Cerrar préstamo (poner fecha devolución)
+            cursor.execute("UPDATE prestamos SET fecha_devolucion = NOW() WHERE libro_id = %s AND usuario_id = %s AND fecha_devolucion IS NULL", (id_libro, id_usuario))
             conn.commit()
             exito = True
         except Error as e:
             conn.rollback()
-            print(f"Error devolviendo libro: {e}")
+            print(f"Error devolviendo: {e}")
         finally:
             cursor.close()
             conn.close()
     return exito
+
+# --- USUARIOS ---
 
 def guardar_usuario(nombre, email, password):
     conn = crear_conexion()
     if conn and conn.is_connected():
         try:
             cursor = conn.cursor()
-            query = "INSERT INTO usuarios (nombre, email, password) VALUES (%s, %s, %s)"
-            cursor.execute(query, (nombre, email, password))
+            cursor.execute("INSERT INTO usuarios (nombre, email, password) VALUES (%s, %s, %s)", (nombre, email, password))
             conn.commit()
             cursor.close()
             conn.close()
             return True
         except Error as e:
-            print(f"Error al guardar usuario: {e}")
             return False
     return False
 
@@ -136,8 +122,7 @@ def verificar_usuario(email, password):
     usuario = None
     if conn and conn.is_connected():
         cursor = conn.cursor(dictionary=True)
-        query = "SELECT * FROM usuarios WHERE email = %s AND password = %s"
-        cursor.execute(query, (email, password))
+        cursor.execute("SELECT * FROM usuarios WHERE email = %s AND password = %s", (email, password))
         usuario = cursor.fetchone()
         cursor.close()
         conn.close()

@@ -2,7 +2,6 @@
 ### Equipo: Zebra
 #### Integrantes del equipo:
 - Flores Solis Marcelo Sebastian (líder del equipo) [18]
-- Cusi Quicaño Jhovi Jose [5]
 - Cáceres Granados Saulo Andres [17]
 
 #### Lenguajes usados

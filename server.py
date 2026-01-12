@@ -1,120 +1,220 @@
-import http.server
 import socketserver
+
 import os
+
 import mimetypes
+
 import json
+
 from urllib.parse import parse_qs, urlparse
 
-# Importamos el manager. Si está en la raíz, es así:
+
+
+# --- IMPORTACIÓN DIRECTA ---
+
 try:
-    import db_manager
-    print("✅ DB Manager cargado.")
-except Exception as e:
-    print(f"⚠️ Error cargando db_manager: {e}")
-    db_manager = None
+
+    import db_manager as db
+
+    print("✅ Base de datos cargada correctamente.")
+
+except ImportError as e:
+
+    print(f"⚠️ ERROR CRÍTICO: {e}")
+
+    db = None
+
+
+
+# CONFIGURACIÓN
 
 PORT = int(os.environ.get("PORT", 8000))
-TEMPLATE_DIR = 'templates'
-ASSET_DIR = 'assets'
+
+
+
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+PUBLIC_DIR = os.path.join(ROOT_DIR, 'public_html')
+
+TEMPLATES_DIR = os.path.join(PUBLIC_DIR, 'templates')
+
+
 
 class BibliotecaHandler(http.server.BaseHTTPRequestHandler):
 
+
+
     def do_GET(self):
-        # Limpieza del path
-        parsed = urlparse(self.path)
-        path = parsed.path.rstrip('/')
+
+        parsed_path = urlparse(self.path)
+
+        path = parsed_path.path.rstrip('/')
+
         if path == '': path = '/'
 
-        # Mapa de rutas a archivos HTML
-        rutas = {
-            '/': 'index.html',
+
+
+        rutas_templates = {
+
             '/catalogo': 'catalogo.html',
+
             '/login': 'login.html',
+
             '/registro': 'register.html',
+
             '/usuario': 'user.html',
+
             '/detalle': 'element.html'
+
         }
 
+
+
         try:
-            # 1. ARCHIVOS ESTÁTICOS (CSS, JS, IMG)
-            # Igual que en tu otro código: si empieza por /assets/
-            if path.startswith('/assets/'):
-                self.servir_statico(path)
+
+            # API: LISTA LIBROS
+
+            if path == '/api/libros':
+
+                if db:
+
+                    self.responder_json(db.obtener_todos_los_libros())
+
+                else:
+
+                    self.send_error(500, "Sin BD")
+
                 return
 
-            # 2. API: DATOS JSON (Para que funcione el Javascript)
-            if path.startswith('/api/'):
-                self.manejar_api_get(path, parsed.query)
+
+
+            # API: UN LIBRO
+
+            if path == '/api/libro':
+
+                query_params = parse_qs(parsed_path.query)
+
+                id_libro = query_params.get('id', [None])[0]
+
+                if db and id_libro:
+
+                    libro = db.obtener_libro_por_id(id_libro)
+
+                    if libro: self.responder_json(libro)
+
+                    else: self.send_error(404)
+
                 return
 
-            # 3. PÁGINAS HTML
-            if path in rutas:
-                # Busca el archivo dentro de la carpeta templates
-                archivo_path = os.path.join(TEMPLATE_DIR, rutas[path])
-                self.servir_html(archivo_path)
+
+
+            # ARCHIVOS ESTÁTICOS Y TEMPLATES
+
+            if path == '/':
+
+                self.servir_archivo(os.path.join(ROOT_DIR, 'index.html'))
+
+            elif path.startswith('/assets/'):
+
+                self.servir_archivo(os.path.join(PUBLIC_DIR, path.lstrip('/')))
+
+            elif path in rutas_templates:
+
+                self.servir_archivo(os.path.join(TEMPLATES_DIR, rutas_templates[path]))
+
             else:
-                self.send_error(404, "Pagina no encontrada")
+
+                self.send_error(404, "No encontrado")
+
+
 
         except Exception as e:
+
             print(f"Error GET: {e}")
-            self.send_error(500, f"Error interno: {e}")
+
+            self.send_error(500)
+
+
 
     def do_POST(self):
+
         try:
-            # Leer el JSON que envía el navegador
+
+            # 1. Leer el tamaño de los datos enviados
+
             content_length = int(self.headers['Content-Length'])
+
             post_data = self.rfile.read(content_length)
+
             datos = json.loads(post_data.decode('utf-8'))
 
-            # Rutas de la API (Login, Registro, Prestar)
+
+
+            # 2. Rutas POST
+
             if self.path == '/api/registro':
-                exito = db_manager.guardar_usuario(datos['nombre'], datos['email'], datos['password'])
+
+                exito = db.guardar_usuario(datos['nombre'], datos['email'], datos['password'])
+
                 if exito: self.responder_json({"mensaje": "Usuario creado"}, 201)
-                else: self.send_error(400, "Error: Email duplicado")
+
+                else: self.send_error(400, "Error al crear usuario (quizas el email ya existe)")
+
+           
 
             elif self.path == '/api/login':
-                usuario = db_manager.verificar_usuario(datos['email'], datos['password'])
+
+                usuario = db.verificar_usuario(datos['email'], datos['password'])
+
                 if usuario:
-                    self.responder_json(usuario) # Devuelve id, nombre, email
+
+                    # Devolvemos los datos del usuario (sin la contraseña)
+
+                    self.responder_json({"id": usuario['id'], "nombre": usuario['nombre'], "email": usuario['email']})
+
                 else:
+
                     self.send_error(401, "Credenciales incorrectas")
 
+
+
             elif self.path == '/api/prestar':
-                if db_manager.prestar_libro(datos.get('id_libro'), datos.get('id_usuario')):
-                    self.responder_json({"mensaje": "Prestamo exitoso"})
+
+                id_libro = datos.get('id_libro')
+
+                if db.prestar_libro(id_libro):
+
+                    self.responder_json({"mensaje": "Libro prestado con exito"})
+
                 else:
-                    self.send_error(400, "No se pudo prestar")
-            
-            elif self.path == '/api/devolver':
-                if db_manager.devolver_libro(datos.get('id_libro'), datos.get('id_usuario')):
-                    self.responder_json({"mensaje": "Devolución exitosa"})
-                else:
-                    self.send_error(400, "No se pudo devolver")
+
+                    self.send_error(500, "Error al prestar libro")
+
+           
 
             else:
-                self.send_error(404, "Ruta POST no valida")
+
+                self.send_error(404, "Ruta POST desconocida")
+
+
 
         except Exception as e:
+
             print(f"Error POST: {e}")
-            self.send_error(500, str(e))
 
-    # --- FUNCIONES AUXILIARES (Iguales a tu estilo) ---
+            self.send_error(500, f"Error interno: {e}")
 
-    def servir_html(self, ruta_archivo):
-        if os.path.exists(ruta_archivo):
-            # Adivina el tipo (aunque sabemos que es HTML)
-            mime_type, _ = mimetypes.guess_type(ruta_archivo)
-            with open(ruta_archivo, 'rb') as f:
-                content = f.read()
-                self.send_response(200)
-                self.send_header('Content-type', mime_type or 'text/html')
-                self.end_headers()
-                self.wfile.write(content)
-        else:
-            self.send_error(404, "Archivo HTML no encontrado")
 
-    def servir_statico(self, path):
-        # Quitamos la barra inicial para que os.path.join funcione bien
+
+    def responder_json(self, data, status=200):
+
+        self.send_response(status)
+
+        self.send_header('Content-type', 'application/json; charset=utf-8')
+
+        self.end_headers()
+
+        self.w        # Quitamos la barra inicial para que os.path.join funcione bien
         ruta_relativa = path.lstrip('/') 
         # Si la ruta ya incluye 'assets/', úsala directo, si no, ajústala
         if not ruta_relativa.startswith(ASSET_DIR):
